@@ -1,5 +1,14 @@
-const kIsNodeJS = Object.prototype.toString.call(typeof process !== 'undefined' ? process : 0) === '[object process]';
-const kRequire = kIsNodeJS && typeof module.require === 'function' ? module.require : null; // eslint-disable-line
+const kIsNodeJS = typeof process !== 'undefined' && Object.prototype.toString.call(process) === '[object process]' && process.versions && process.versions.node !== undefined;
+const kRequire = kIsNodeJS && typeof module.require === 'function' ? module.require : null;
+
+function getNativeNodeWorker() {
+    try {
+        return kRequire('worker_threads').Worker;
+    } catch (ex) {
+        // eslint-disable-next-line no-use-before-define
+        return WorkerShim;
+    }
+}
 
 export function createInlineWorkerFactory(fn, sourcemap = null) {
     const source = fn.toString();
@@ -11,7 +20,7 @@ export function createInlineWorkerFactory(fn, sourcemap = null) {
 
     if (kRequire) {
         /* node.js */
-        const Worker = kRequire('worker_threads').Worker; // eslint-disable-line
+        const Worker = getNativeNodeWorker();
         const concat = lines.join('\n');
         return function WorkerFactory(options) {
             return new Worker(concat, Object.assign({}, options, { eval: true }));
@@ -29,7 +38,7 @@ export function createInlineWorkerFactory(fn, sourcemap = null) {
 export function createURLWorkerFactory(url) {
     if (kRequire) {
         /* node.js */
-        const Worker = kRequire('worker_threads').Worker; // eslint-disable-line
+        const Worker = getNativeNodeWorker();
         return function WorkerFactory(options) {
             return new Worker(url, options);
         };
@@ -47,7 +56,7 @@ export function createBase64WorkerFactory(base64, sourcemap = null) {
 
     if (kRequire) {
         /* node.js */
-        const Worker = kRequire('worker_threads').Worker; // eslint-disable-line
+        const Worker = getNativeNodeWorker();
         return function WorkerFactory(options) {
             return new Worker(body, Object.assign({}, options, { eval: true }));
         };
@@ -60,3 +69,12 @@ export function createBase64WorkerFactory(base64, sourcemap = null) {
         return new Worker(url, options);
     };
 }
+
+function WorkerShim() {
+    this.isFake = true;
+}
+WorkerShim.prototype.onmessage = null;
+WorkerShim.prototype.postMessage = function () {};
+WorkerShim.prototype.addEventListener = function () {};
+WorkerShim.prototype.terminate = function () {};
+WorkerShim.prototype.removeEventListener = function () {};
